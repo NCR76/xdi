@@ -4,11 +4,12 @@ import os, sys
 BUILD_DIR        = 'build'
 PROJECT_DIR      = 'src'
 PLATFORM_TOOLSET = 'v140'
-F4SE_REVISION    = 'tags/v0.6.17'
+F4SE_REVISION    = 'master'
+COMMON_REVISION  = 'master'
 
 # Run build tools
-buildOK = os.system('python tools/build-tools/build_plugin.py "{}" "{}" "{}" "{}"'
-    .format(BUILD_DIR, PROJECT_DIR, PLATFORM_TOOLSET, F4SE_REVISION))
+buildOK = os.system('python tools/build-tools/build_plugin.py "{}" "{}" "{}" "{}" "{}"'
+    .format(BUILD_DIR, PROJECT_DIR, PLATFORM_TOOLSET, F4SE_REVISION, COMMON_REVISION))
     
 # Report result
 sys.exit(buildOK)
