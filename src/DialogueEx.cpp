@@ -17,6 +17,8 @@
 #include "f4se/GameRTTI.h"
 #include "f4se/GameMenus.h"
 
+#include "Settings.h" // WMK PATCH
+
 namespace DialogueEx {
     //--------------------
     // Addresses [23]
@@ -269,6 +271,80 @@ namespace DialogueEx {
                         DoTextReplacement_Internal(&str, info->topic->owningQuest, Utils::GetOffset<UInt32>(info->topic->owningQuest, 0x50));
                     responseText = str.Get();
                 }
+
+				// WMK PATCH
+				{
+					if (Settings::GetBool("bShowOriginalPrompt:DialogueMenu")) {
+						TESTopicInfo* topicInfo = originalInfo;
+						auto prompt = g_dialoguePrompts->Find(&topicInfo);
+
+						if (!prompt) {
+							if (!(topicInfo->flags & TESTopicInfo::kFlag_InfoGroup)) {
+								topicInfo = GetInfoGroupParent(topicInfo);
+								if (topicInfo) {
+									prompt = g_dialoguePrompts->Find(&topicInfo);
+								}
+							}
+						}
+
+						if (prompt) {
+							const char* text = prompt->prompt.c_str();
+
+							if (text && text[0]) {
+								// The AS code treats the prompt as a JSON if it starts with '{' character.
+								// I don't know if vanilla dialogs have JSON as prompts or this is a feature added by XDI for other mods.
+								if (text[0] != '{') {
+									BSStringEx str(text);
+									DoTextReplacement_Internal(&str, topicInfo->topic->owningQuest, Utils::GetOffset<UInt32>(topicInfo->topic->owningQuest, 0x50));
+									const char* prompt_cstr = str.Get();
+									if (prompt_cstr && prompt_cstr[0]) {
+										// This should be OK because ... I assume that there won't be multiple threads executing this code in the same time.
+										// Otherwise this code should be moved in constructor or something like this.
+										static std::string format;
+										static bool format_init = false;
+										if (!format_init) {
+											format = Settings::GetString("sShowOriginalPromptFormat:DialogueMenu", "$prompt &#187; $text");
+											_MESSAGE("[WMK] - Format setting: '%s'", format.c_str());
+											if (format.size()) {
+												// Escape all % characters...
+												size_t pos = 0;
+												while ((pos = format.find('%', pos)) != std::string::npos) {
+													format.insert(pos, 1, '%');
+													pos += 2;
+												}
+												// Replace $prompt and $text with %n$s...
+												const char* repl[] = { "$prompt", "%1$s", "$text", "%2$s" };
+												for (int i = 0; i < sizeof(repl) / sizeof(const char*); i += 2) {
+													pos = format.find(repl[i]);
+													if (pos != std::string::npos) {
+														format.replace(pos, strlen(repl[i]), repl[i + 1]);
+													}
+												}
+												// Done.
+												_MESSAGE("[WMK] - Using '%s' format for dialogues...", format.c_str());
+											}
+											format_init = true;
+										}
+										// Only _sprintf_p supports positional parameters in Visual Studio, but this one doesn't return the number or required bytes if the buffer is too small.
+										// This assumes that the resulted text contains the prompt + response + few extra characters...
+										if (format.size()) {
+											int buffer_size = strlen(prompt_cstr) + responseText.size() + format.size();
+											std::unique_ptr<char[]> buf(new char[buffer_size]);
+											int format_result = _sprintf_p(buf.get(), buffer_size, format.c_str(), prompt_cstr, responseText.c_str());
+											if (format_result <= 0) {
+												_MESSAGE("Failed to format the dialogue text: format = '%s' prompt='%s' text='%s' buffer_size = %d format_result = %d", format.c_str(), prompt_cstr, responseText.c_str(), buffer_size, format_result);
+											}
+											else {
+												responseText = std::string(buf.get());
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				// WMK PATCH
 
                 // Get NPC response TopicInfo for dialogue cues.
                 TESTopicInfo* npcResponseInfo = active ? GetNPCInfo(playerDialogue, i) : GetInfoForNPCDialogueOption_Original(playerDialogue, currentScene, *G::player, vanillaDialogueOrder[i]);
